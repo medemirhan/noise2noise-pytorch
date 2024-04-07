@@ -4,6 +4,7 @@
 import torch
 import torch.nn.functional as F
 import torchvision.transforms.functional as tvF
+from torchmetrics.image import PeakSignalNoiseRatio
 
 import os
 import numpy as np
@@ -19,6 +20,7 @@ import matplotlib
 matplotlib.use('agg')
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
+import scipy.io as sio
 
 
 def clear_line():
@@ -107,17 +109,35 @@ def reinhard_tonemap(tensor):
     return torch.pow(tensor / (1 + tensor), 1 / 2.2)
 
 
-def psnr(input, target):
+def psnr(input, target, data_range=None):
     """Computes peak signal-to-noise ratio."""
     
-    return 10 * torch.log10(1 / F.mse_loss(input, target))
+    #return 10 * torch.log10(1 / F.mse_loss(input, target))
+
+    if torch.is_tensor(input):
+        data_in = input
+    else:
+        data_in = torch.tensor(input)
+
+    if torch.is_tensor(target):
+        data_out = target
+    else:
+        data_out = torch.tensor(target)
+
+    if data_range == None:
+        psnr_torch = PeakSignalNoiseRatio()
+    else:
+        psnr_torch = PeakSignalNoiseRatio(data_range=data_range)
+
+    return psnr_torch(data_in, data_out)
 
 
 def create_montage(img_name, noise_type, save_path, source_t, denoised_t, clean_t, show):
     """Creates montage for easy comparison."""
 
     fig, ax = plt.subplots(1, 3, figsize=(9, 3))
-    fig.canvas.set_window_title(img_name.capitalize()[:-4])
+    #fig.canvas.set_window_title(img_name.capitalize()[:-4])
+    fig.canvas.manager.set_window_title(img_name.capitalize()[:-4])
 
     # Bring tensors to CPU
     source_t = source_t.cpu().narrow(0, 0, 3)
@@ -149,6 +169,25 @@ def create_montage(img_name, noise_type, save_path, source_t, denoised_t, clean_
     denoised.save(os.path.join(save_path, f'{fname}-{noise_type}-denoised.png'))
     fig.savefig(os.path.join(save_path, f'{fname}-{noise_type}-montage.png'), bbox_inches='tight')
 
+def save_hsi(img_name, noise_type, save_path, source_t, denoised_t, clean_t, max_val_train=None):
+    # Bring tensors to CPU
+    source_t = source_t.cpu().numpy()
+    denoised_t = denoised_t.cpu().numpy()
+    clean_t = clean_t.cpu().numpy()
+
+    mdic_source = {"data": source_t}
+    mdic_denoised = {"data": denoised_t}
+
+    psnr_source = psnr(source_t, clean_t, max_val_train).item()
+    psnr_source = "{:.2f}".format(psnr_source)
+
+    psnr_denoised = psnr(denoised_t, clean_t, max_val_train).item()
+    psnr_denoised = "{:.2f}".format(psnr_denoised)
+
+    fname = os.path.splitext(img_name)[0]
+    sio.savemat(os.path.join(save_path, f'{fname}-{noise_type}-psnr-{psnr_source}-noisy.mat'), mdic_source)
+    sio.savemat(os.path.join(save_path, f'{fname}-{noise_type}-psnr-{psnr_denoised}-denoised.mat'), mdic_denoised)
+
 
 class AvgMeter(object):
     """Computes and stores the average and current value.
@@ -171,3 +210,26 @@ class AvgMeter(object):
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
+
+def load_hsi_as_tensor(path, matContentHeader="data", normalize=False, max_val=255):
+    mat = sio.loadmat(path)
+    mat = mat[matContentHeader]
+
+    if normalize:
+        mat = normalize_hsi(mat, max_val)
+
+    assert isinstance(mat, np.ndarray) and mat.dtype != np.uint8
+    return tvF.to_tensor(mat)
+
+
+def normalize(img, max_val):
+    return img / max_val * 255.0
+
+
+def inverse_normalize(img, max_val):
+    return img / 255.0 * max_val
+
+
+def normalize_hsi(hsi, max_val=255):
+    curr_max = np.amax(hsi)
+    return hsi / curr_max * max_val

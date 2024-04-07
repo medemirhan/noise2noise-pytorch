@@ -6,7 +6,8 @@ import torch.nn.functional as F
 import torchvision.transforms.functional as tvF
 from torch.utils.data import Dataset, DataLoader
 
-from utils import load_hdr_as_tensor
+#from utils import load_hdr_as_tensor
+from utils import load_hdr_as_tensor, load_hsi_as_tensor, normalize
 
 import os
 from sys import platform
@@ -23,7 +24,7 @@ matplotlib.use('agg')
 import matplotlib.pyplot as plt
 
 
-def load_dataset(root_dir, redux, params, shuffled=False, single=False):
+def load_dataset(root_dir, redux, params, shuffled=False, single=False, is_train=False, max_val_train=None):
     """Loads dataset and returns corresponding data loader."""
 
     # Create Torch dataset
@@ -35,7 +36,8 @@ def load_dataset(root_dir, redux, params, shuffled=False, single=False):
             clean_targets=params.clean_targets)
     else:
         dataset = NoisyDataset(root_dir, redux, params.crop_size,
-            clean_targets=params.clean_targets, noise_dist=noise, seed=params.seed)
+            clean_targets=params.clean_targets, noise_dist=noise, seed=params.seed,
+            is_train=is_train, max_val_train=max_val_train)
 
     # Use batch size of 1, if requested (e.g. test set)
     if single:
@@ -63,7 +65,8 @@ class AbstractDataset(Dataset):
         Works with list so that all items get the same cropped window (e.g. for buffers).
         """
 
-        w, h = img_list[0].size
+        #w, h = img_list[0].size
+        c, h, w = img_list[0].size()
         assert w >= self.crop_size and h >= self.crop_size, \
             f'Error: Crop size: {self.crop_size}, Image size: ({w}, {h})'
         cropped_imgs = []
@@ -73,7 +76,8 @@ class AbstractDataset(Dataset):
         for img in img_list:
             # Resize if dimensions are too small
             if min(w, h) < self.crop_size:
-                img = tvF.resize(img, (self.crop_size, self.crop_size))
+                #img = tvF.resize(img, (self.crop_size, self.crop_size))
+                img = tvF.resize(img, (c, self.crop_size, self.crop_size))
 
             # Random crop
             cropped_imgs.append(tvF.crop(img, i, j, self.crop_size, self.crop_size))
@@ -97,7 +101,7 @@ class NoisyDataset(AbstractDataset):
     """Class for injecting random noise into dataset."""
 
     def __init__(self, root_dir, redux, crop_size, clean_targets=False,
-        noise_dist=('gaussian', 50.), seed=None):
+        noise_dist=('gaussian', 50.), seed=None, is_train=False, max_val_train=None):
         """Initializes noisy image dataset."""
 
         super(NoisyDataset, self).__init__(root_dir, redux, crop_size, clean_targets)
@@ -112,13 +116,15 @@ class NoisyDataset(AbstractDataset):
         self.seed = seed
         if self.seed:
             np.random.seed(self.seed)
-
+        self.is_train = is_train
+        self.max_val_train = max_val_train
 
     def _add_noise(self, img):
         """Adds Gaussian or Poisson noise to image."""
 
-        w, h = img.size
-        c = len(img.getbands())
+        #w, h = img.size
+        #c = len(img.getbands())
+        c, h, w = img.size()
 
         # Poisson distribution
         # It is unclear how the paper handles this. Poisson noise is not additive,
@@ -135,13 +141,17 @@ class NoisyDataset(AbstractDataset):
                 std = self.noise_param
             else:
                 std = np.random.uniform(0, self.noise_param)
-            noise = np.random.normal(0, std, (h, w, c))
+            #noise = np.random.normal(0, std, (h, w, c))
+            noise = np.random.normal(0, std, (c, h, w)) # burada negatife donduren noise'ler ekleniyor galiba?
+            #noise += np.abs(np.amin(noise))
 
             # Add noise and clip
             noise_img = np.array(img) + noise
 
-        noise_img = np.clip(noise_img, 0, 255).astype(np.uint8)
-        return Image.fromarray(noise_img)
+        #noise_img = np.clip(noise_img, 0, 255).astype(np.uint8)
+        #return Image.fromarray(noise_img)
+        noise_img = np.clip(noise_img, 0, 255)
+        return noise_img
 
 
     def _add_text_overlay(self, img):
@@ -208,7 +218,11 @@ class NoisyDataset(AbstractDataset):
 
         # Load PIL image
         img_path = os.path.join(self.root_dir, self.imgs[index])
-        img =  Image.open(img_path).convert('RGB')
+        #img =  Image.open(img_path).convert('RGB')
+        img = load_hsi_as_tensor(img_path, normalize=False)
+
+        if False == self.is_train:
+            img = normalize(img, self.max_val_train)
 
         # Random square crop
         if self.crop_size != 0:
@@ -216,15 +230,22 @@ class NoisyDataset(AbstractDataset):
 
         # Corrupt source image
         tmp = self._corrupt(img)
-        source = tvF.to_tensor(self._corrupt(img))
+        assert isinstance(tmp, np.ndarray) and tmp.dtype != np.uint8
+        source = tvF.to_tensor(tmp)
+        source = torch.permute(source, (1, 2, 0))
 
         # Corrupt target image, but not when clean targets are requested
         if self.clean_targets:
-            target = tvF.to_tensor(img)
+            #target = tvF.to_tensor(img) # testte buraya giriyor. trainde de clean_targets true olursa soru olur mu tekrar dusun
+            target = img
         else:
+            tmp = self._corrupt(img)
+            assert isinstance(tmp, np.ndarray) and tmp.dtype != np.uint8
             target = tvF.to_tensor(self._corrupt(img))
+            target = torch.permute(target, (1, 2, 0))
 
-        return source, target
+        #return source, target
+        return source.float(), target.float()
 
 
 class MonteCarloDataset(AbstractDataset):

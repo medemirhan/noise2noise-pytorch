@@ -20,13 +20,13 @@ def parse_args():
     parser.add_argument('-v', '--valid-dir', help='test set path', default='./../data/valid')
     parser.add_argument('--ckpt-save-path', help='checkpoint save path', default='./../ckpts')
     parser.add_argument('--ckpt-overwrite', help='overwrite model checkpoint on save', action='store_true')
-    parser.add_argument('--report-interval', help='batch report interval', default=500, type=int)
+    parser.add_argument('--report-interval', help='batch report interval', default=250, type=int)
     parser.add_argument('-ts', '--train-size', help='size of train dataset', type=int)
     parser.add_argument('-vs', '--valid-size', help='size of valid dataset', type=int)
 
     # Training hyperparameters
     parser.add_argument('-lr', '--learning-rate', help='learning rate', default=0.001, type=float)
-    parser.add_argument('-a', '--adam', help='adam parameters', nargs='+', default=[0.9, 0.99, 1e-8], type=list)
+    parser.add_argument('-a', '--adam', help='adam parameters (b1, b2, eps, weight_decay)', nargs='+', default=[0.9, 0.99, 1e-8, 0], type=list)
     parser.add_argument('-b', '--batch-size', help='minibatch size', default=4, type=int)
     parser.add_argument('-e', '--nb-epochs', help='number of epochs', default=100, type=int)
     parser.add_argument('-l', '--loss', help='loss function', choices=['l1', 'l2', 'hdr'], default='l1', type=str)
@@ -50,9 +50,29 @@ if __name__ == '__main__':
     # Parse training parameters
     params = parse_args()
 
+    params.train_dir = "data/train"
+    params.train_size = 10
+    params.valid_dir = "data/valid"
+    params.valid_size = 3
+    params.ckpt_save_path = "../ckpts"
+    params.nb_epochs = 60
+    params.batch_size = 3
+    params.loss = "l2"
+    params.noise_type = "gaussian"
+    params.noise_param = 50
+    params.crop_size = 128
+    params.plot_stats = True
+    params.cuda = True
+    params.seed = 42
+    params.report_interval = 1
+    params.learning_rate = 1e-4
+    params.adam = [0.9, 0.99, 1e-8, 0]
+
+    mxx = 1.669760584831238
+
     # Train/valid datasets
-    train_loader = load_dataset(params.train_dir, params.train_size, params, shuffled=True)
-    valid_loader = load_dataset(params.valid_dir, params.valid_size, params, shuffled=False)
+    train_loader = load_dataset(params.train_dir, params.train_size, params, shuffled=True, is_train=True)
+    valid_loader = load_dataset(params.valid_dir, params.valid_size, params, shuffled=False, max_val_train=mxx)
 
     # Initialize model and train
     n2n = Noise2Noise(params, trainable=True)

@@ -34,14 +34,16 @@ class Noise2Noise(object):
             self.model = UNet(in_channels=9)
         else:
             self.is_mc = False
-            self.model = UNet(in_channels=3)
+            #self.model = UNet(in_channels=3)
+            self.model = UNet(in_channels=64, out_channels=64)
 
         # Set optimizer and loss, if in training mode
         if self.trainable:
             self.optim = Adam(self.model.parameters(),
                               lr=self.p.learning_rate,
                               betas=self.p.adam[:2],
-                              eps=self.p.adam[2])
+                              eps=self.p.adam[2],
+                              weight_decay=self.p.adam[3])
 
             # Learning rate adjustment
             self.scheduler = lr_scheduler.ReduceLROnPlateau(self.optim,
@@ -81,9 +83,9 @@ class Noise2Noise(object):
         # Create directory for model checkpoints, if nonexistent
         if first:
             if self.p.clean_targets:
-                ckpt_dir_name = f'{datetime.now():{self.p.noise_type}-clean-%H%M}'
+                ckpt_dir_name = f'{datetime.now():{self.p.noise_type}-clean-%Y%m%d_%H%M%S}'
             else:
-                ckpt_dir_name = f'{datetime.now():{self.p.noise_type}-%H%M}'
+                ckpt_dir_name = f'{datetime.now():{self.p.noise_type}-%Y%m%d_%H%M%S}'
             if self.p.ckpt_overwrite:
                 if self.p.clean_targets:
                     ckpt_dir_name = f'{self.p.noise_type}-clean'
@@ -146,7 +148,7 @@ class Noise2Noise(object):
             plot_per_epoch(self.ckpt_dir, 'Valid PSNR', stats['valid_psnr'], 'PSNR (dB)')
 
 
-    def test(self, test_loader, show):
+    def test(self, test_loader, show, max_val_train=None):
         """Evaluates denoiser on test set."""
 
         self.model.train(False)
@@ -157,7 +159,12 @@ class Noise2Noise(object):
 
         # Create directory for denoised images
         denoised_dir = os.path.dirname(self.p.data)
-        save_path = os.path.join(denoised_dir, 'denoised')
+        temp_str = self.p.load_ckpt.split('/')
+        dir_str = 'denoised'
+        if 'gaussian' in temp_str[2] or 'poisson' in temp_str[2] or 'text' in temp_str[2] or 'mc' in temp_str[2]:
+            dir_str = dir_str + '_' + temp_str[2]
+
+        save_path = os.path.join(denoised_dir, dir_str)
         if not os.path.isdir(save_path):
             os.mkdir(save_path)
 
@@ -177,15 +184,16 @@ class Noise2Noise(object):
             denoised_imgs.append(denoised_img)
 
         # Squeeze tensors
-        source_imgs = [t.squeeze(0) for t in source_imgs]
-        denoised_imgs = [t.squeeze(0) for t in denoised_imgs]
-        clean_imgs = [t.squeeze(0) for t in clean_imgs]
+        source_imgs = [torch.permute(inverse_normalize(t, max_val_train).squeeze(0), (1, 2, 0)) for t in source_imgs]
+        denoised_imgs = [torch.permute(inverse_normalize(t, max_val_train).squeeze(0), (1, 2, 0)) for t in denoised_imgs]
+        clean_imgs = [torch.permute(inverse_normalize(t, max_val_train).squeeze(0), (1, 2, 0)) for t in clean_imgs]
 
         # Create montage and save images
         print('Saving images and montages to: {}'.format(save_path))
         for i in range(len(source_imgs)):
             img_name = test_loader.dataset.imgs[i]
-            create_montage(img_name, self.p.noise_type, save_path, source_imgs[i], denoised_imgs[i], clean_imgs[i], show)
+            #create_montage(img_name, self.p.noise_type, save_path, source_imgs[i], denoised_imgs[i], clean_imgs[i], show)
+            save_hsi(img_name, self.p.noise_type, save_path, source_imgs[i], denoised_imgs[i], clean_imgs[i], max_val_train)
 
 
     def eval(self, valid_loader):
@@ -216,7 +224,7 @@ class Noise2Noise(object):
             for i in range(self.p.batch_size):
                 source_denoised = source_denoised.cpu()
                 target = target.cpu()
-                psnr_meter.update(psnr(source_denoised[i], target[i]).item())
+                psnr_meter.update(psnr(source_denoised[i], target[i], 255.0).item())
 
         valid_loss = loss_meter.avg
         valid_time = time_elapsed_since(valid_start)[0]
