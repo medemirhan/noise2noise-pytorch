@@ -39,7 +39,7 @@ if __name__ == '__main__':
     params = parse_args()
 
     params.data = "data/test"
-    params.load_ckpt = "../ckpts/gaussian-20240325_035830/n2n-epoch58-1413.07397.pt"
+    params.load_ckpt = "../ckpts/gaussian-20240407_175022/n2n-epoch10-1487.72949.pt"
     params.noise_type = "gaussian"
     params.noise_param = 50
     params.crop_size = 256
@@ -47,12 +47,20 @@ if __name__ == '__main__':
     params.cuda = True
     params.seed = 42
 
-    mxx = 1.669760584831238
+    #mxx = 1.669760584831238
 
     # Initialize model and test
     n2n = Noise2Noise(params, trainable=False)
     params.redux = False
     params.clean_targets = True
-    test_loader = load_dataset(params.data, 0, params, shuffled=False, single=True, max_val_train=mxx)
+    test_loader = load_dataset(
+        params.data,
+        0,
+        params,
+        shuffled=False,
+        single=True,
+        is_train=False,
+        normalization_path="data/norm.pkl"
+        )
     n2n.load_model(params.load_ckpt)
-    n2n.test(test_loader, show=params.show_output, max_val_train=mxx)
+    n2n.test(test_loader, show=params.show_output)

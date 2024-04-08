@@ -10,6 +10,7 @@ from utils import *
 
 import os
 import json
+import pickle
 
 
 class Noise2Noise(object):
@@ -148,8 +149,15 @@ class Noise2Noise(object):
             plot_per_epoch(self.ckpt_dir, 'Valid PSNR', stats['valid_psnr'], 'PSNR (dB)')
 
 
-    def test(self, test_loader, show, max_val_train=None):
+    def test(self, test_loader, show):
         """Evaluates denoiser on test set."""
+
+        if None != test_loader.dataset.normalization_path:
+            with open(test_loader.dataset.normalization_path, 'rb') as file:
+                data = pickle.load(file)
+            test_loader.dataset.normalize = data["normalization"]
+            test_loader.dataset.norm_max = data["norm_max"]
+            test_loader.dataset.norm_min = data["norm_min"]
 
         self.model.train(False)
 
@@ -184,16 +192,16 @@ class Noise2Noise(object):
             denoised_imgs.append(denoised_img)
 
         # Squeeze tensors
-        source_imgs = [torch.permute(inverse_normalize(t, max_val_train).squeeze(0), (1, 2, 0)) for t in source_imgs]
-        denoised_imgs = [torch.permute(inverse_normalize(t, max_val_train).squeeze(0), (1, 2, 0)) for t in denoised_imgs]
-        clean_imgs = [torch.permute(inverse_normalize(t, max_val_train).squeeze(0), (1, 2, 0)) for t in clean_imgs]
+        source_imgs = [torch.permute(inverse_normalize(t, test_loader.dataset.normalize, test_loader.dataset.norm_max, test_loader.dataset.norm_min).squeeze(0), (1, 2, 0)) for t in source_imgs]
+        denoised_imgs = [torch.permute(inverse_normalize(t, test_loader.dataset.normalize, test_loader.dataset.norm_max, test_loader.dataset.norm_min).squeeze(0), (1, 2, 0)) for t in denoised_imgs]
+        clean_imgs = [torch.permute(inverse_normalize(t, test_loader.dataset.normalize, test_loader.dataset.norm_max, test_loader.dataset.norm_min).squeeze(0), (1, 2, 0)) for t in clean_imgs]
 
         # Create montage and save images
         print('Saving images and montages to: {}'.format(save_path))
         for i in range(len(source_imgs)):
             img_name = test_loader.dataset.imgs[i]
             #create_montage(img_name, self.p.noise_type, save_path, source_imgs[i], denoised_imgs[i], clean_imgs[i], show)
-            save_hsi(img_name, self.p.noise_type, save_path, source_imgs[i], denoised_imgs[i], clean_imgs[i], max_val_train)
+            save_hsi(img_name, self.p.noise_type, save_path, source_imgs[i], denoised_imgs[i], clean_imgs[i], test_loader.dataset.norm_max)
 
 
     def eval(self, valid_loader):

@@ -7,6 +7,7 @@ import torch.nn as nn
 from datasets import load_dataset
 from noise2noise import Noise2Noise
 from argparse import ArgumentParser
+from utils import get_max_min
 
 
 def parse_args():
@@ -50,7 +51,7 @@ if __name__ == '__main__':
     # Parse training parameters
     params = parse_args()
 
-    params.train_dir = "data/train"
+    params.train_dir = "data/train_nonnormalized"
     params.train_size = 10
     params.valid_dir = "data/valid"
     params.valid_size = 3
@@ -68,11 +69,29 @@ if __name__ == '__main__':
     params.learning_rate = 1e-4
     params.adam = [0.9, 0.99, 1e-8, 0]
 
-    mxx = 1.669760584831238
+    #mxx = 1.669760584831238
+
+    #max_val_train, min_val_train = get_max_min(params.train_dir, "mat")
 
     # Train/valid datasets
-    train_loader = load_dataset(params.train_dir, params.train_size, params, shuffled=True, is_train=True)
-    valid_loader = load_dataset(params.valid_dir, params.valid_size, params, shuffled=False, max_val_train=mxx)
+    train_loader = load_dataset(
+        params.train_dir,
+        params.train_size,
+        params,
+        shuffled=True,
+        is_train=True,
+        normalize="min_max",
+        normalization_path="data/norm.pkl"
+        )
+
+    valid_loader = load_dataset(
+        params.valid_dir,
+        params.valid_size,
+        params,
+        shuffled=False,
+        is_train=False,
+        normalization_path="data/norm.pkl"
+        )
 
     # Initialize model and train
     n2n = Noise2Noise(params, trainable=True)

@@ -7,6 +7,7 @@ import torchvision.transforms.functional as tvF
 from torchmetrics.image import PeakSignalNoiseRatio
 
 import os
+import glob
 import numpy as np
 from math import log10
 from datetime import datetime
@@ -169,7 +170,7 @@ def create_montage(img_name, noise_type, save_path, source_t, denoised_t, clean_
     denoised.save(os.path.join(save_path, f'{fname}-{noise_type}-denoised.png'))
     fig.savefig(os.path.join(save_path, f'{fname}-{noise_type}-montage.png'), bbox_inches='tight')
 
-def save_hsi(img_name, noise_type, save_path, source_t, denoised_t, clean_t, max_val_train=None):
+def save_hsi(img_name, noise_type, save_path, source_t, denoised_t, clean_t, max_val_train=255.0):
     # Bring tensors to CPU
     source_t = source_t.cpu().numpy()
     denoised_t = denoised_t.cpu().numpy()
@@ -211,25 +212,72 @@ class AvgMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
-def load_hsi_as_tensor(path, matContentHeader="data", normalize=False, max_val=255):
+def load_hsi_as_tensor(path, matContentHeader="data"):
     mat = sio.loadmat(path)
     mat = mat[matContentHeader]
-
-    if normalize:
-        mat = normalize_hsi(mat, max_val)
 
     assert isinstance(mat, np.ndarray) and mat.dtype != np.uint8
     return tvF.to_tensor(mat)
 
 
-def normalize(img, max_val):
-    return img / max_val * 255.0
+def normalize(img, norm_type="max", max_val=None, min_val=None):
+    if "max" == norm_type:
+        return img / max_val * 255.0
+    
+    elif "min_max" == norm_type:
+        return ((img - min_val) / (max_val - min_val)) * 255
+    
+    elif "max_single_img" == norm_type:
+        return img / torch.max(img) * 255.0
+    
+    elif "min_max_single_img" == norm_type:
+        return ((img - torch.min(img)) / (torch.max(img) - torch.min(img))) * 255
+    
+    else:
+        raise NotImplementedError("This normalization is not implemented")
 
 
-def inverse_normalize(img, max_val):
+def inverse_normalize(img, norm_type="max", max_val=None, min_val=None):
+    if "max" == norm_type:
+        return img * max_val / 255.0
+    
+    elif "min_max" == norm_type:
+        return img * (max_val - min_val) / 255.0 + min_val
+    
+    elif "max_single_img" == norm_type:
+        return img / torch.max(img) * 255.0
+    
+    elif "min_max_single_img" == norm_type:
+        return img * (torch.max(img) - torch.min(img)) / 255.0 + torch.min(img)
+    
+    else:
+        raise NotImplementedError("This normalization is not implemented")
+
+
+def inverse_normalizessss(img, max_val):
     return img / 255.0 * max_val
 
 
 def normalize_hsi(hsi, max_val=255):
     curr_max = np.amax(hsi)
     return hsi / curr_max * max_val
+
+
+def get_max_min(dir, ext="mat"):
+    search_pattern = os.path.join(dir, f"*.{ext}")
+    files = glob.glob(search_pattern)
+
+    global_max = -float('inf')
+    global_min = float('inf')
+
+    for file in files:
+        img = load_hsi_as_tensor(file)
+        if torch.max(img) > global_max:
+            global_max = torch.max(img)
+        if torch.min(img) < global_min:
+            global_min = torch.min(img)
+    
+    print("Maximum value among all elements:", global_max.item())
+    print("Minimum value among all elements:", global_min.item())
+
+    return global_max, global_min

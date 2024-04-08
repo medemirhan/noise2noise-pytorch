@@ -7,7 +7,7 @@ import torchvision.transforms.functional as tvF
 from torch.utils.data import Dataset, DataLoader
 
 #from utils import load_hdr_as_tensor
-from utils import load_hdr_as_tensor, load_hsi_as_tensor, normalize
+from utils import load_hdr_as_tensor, load_hsi_as_tensor, normalize, get_max_min
 
 import os
 from sys import platform
@@ -16,6 +16,7 @@ import random
 from string import ascii_letters
 from PIL import Image, ImageFont, ImageDraw
 import OpenEXR
+import pickle
 
 from matplotlib import rcParams
 rcParams['font.family'] = 'serif'
@@ -24,7 +25,7 @@ matplotlib.use('agg')
 import matplotlib.pyplot as plt
 
 
-def load_dataset(root_dir, redux, params, shuffled=False, single=False, is_train=False, max_val_train=None):
+def load_dataset(root_dir, redux, params, shuffled=False, single=False, is_train=False, normalize=None, norm_max=None, norm_min=None, normalization_path=None):
     """Loads dataset and returns corresponding data loader."""
 
     # Create Torch dataset
@@ -37,7 +38,7 @@ def load_dataset(root_dir, redux, params, shuffled=False, single=False, is_train
     else:
         dataset = NoisyDataset(root_dir, redux, params.crop_size,
             clean_targets=params.clean_targets, noise_dist=noise, seed=params.seed,
-            is_train=is_train, max_val_train=max_val_train)
+            is_train=is_train, normalize=normalize, norm_max=norm_max, norm_min=norm_min, normalization_path=normalization_path)
 
     # Use batch size of 1, if requested (e.g. test set)
     if single:
@@ -101,7 +102,7 @@ class NoisyDataset(AbstractDataset):
     """Class for injecting random noise into dataset."""
 
     def __init__(self, root_dir, redux, crop_size, clean_targets=False,
-        noise_dist=('gaussian', 50.), seed=None, is_train=False, max_val_train=None):
+        noise_dist=('gaussian', 50.), seed=None, is_train=False, normalize=None, norm_max=None, norm_min=None, normalization_path=None):
         """Initializes noisy image dataset."""
 
         super(NoisyDataset, self).__init__(root_dir, redux, crop_size, clean_targets)
@@ -117,7 +118,31 @@ class NoisyDataset(AbstractDataset):
         if self.seed:
             np.random.seed(self.seed)
         self.is_train = is_train
-        self.max_val_train = max_val_train
+        self.normalize = normalize
+        self.normalization_path = normalization_path
+
+        if True == self.is_train:
+            if self.normalize in ["max", "min_max"]:
+                self.norm_max, self.norm_min = get_max_min(root_dir)
+                data = {
+                    'normalization': self.normalize,
+                    'norm_max': self.norm_max,
+                    'norm_min': self.norm_min
+                }
+                with open(self.normalization_path, 'wb') as file:
+                    pickle.dump(data, file)
+                print("Object saved to file:", self.normalization_path)
+
+        else:
+            if None != self.normalization_path:
+                with open(self.normalization_path, 'rb') as file:
+                    data = pickle.load(file)
+                self.normalize = data["normalization"]
+                self.norm_max = data["norm_max"]
+                self.norm_min = data["norm_min"]
+            else:
+                self.norm_max = norm_max
+                self.norm_min = norm_min
 
     def _add_noise(self, img):
         """Adds Gaussian or Poisson noise to image."""
@@ -219,10 +244,10 @@ class NoisyDataset(AbstractDataset):
         # Load PIL image
         img_path = os.path.join(self.root_dir, self.imgs[index])
         #img =  Image.open(img_path).convert('RGB')
-        img = load_hsi_as_tensor(img_path, normalize=False)
+        img = load_hsi_as_tensor(img_path)
 
-        if False == self.is_train:
-            img = normalize(img, self.max_val_train)
+        if None != self.normalize:
+            img = normalize(img, self.normalize, self.norm_max, self.norm_min)
 
         # Random square crop
         if self.crop_size != 0:
