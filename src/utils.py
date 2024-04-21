@@ -244,10 +244,10 @@ def inverse_normalize(img, norm_type="max", max_val=None, min_val=None):
     elif "min_max" == norm_type:
         return img * (max_val - min_val) / 255.0 + min_val
     
-    elif "max_single_img" == norm_type:
+    elif "max_single_img" == norm_type: #TODO dogru degil
         return img / torch.max(img) * 255.0
     
-    elif "min_max_single_img" == norm_type:
+    elif "min_max_single_img" == norm_type: #TODO dogru degil
         return img * (torch.max(img) - torch.min(img)) / 255.0 + torch.min(img)
     
     else:

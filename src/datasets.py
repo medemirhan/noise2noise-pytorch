@@ -132,6 +132,8 @@ class NoisyDataset(AbstractDataset):
                 with open(self.normalization_path, 'wb') as file:
                     pickle.dump(data, file)
                 print("Object saved to file:", self.normalization_path)
+            else: #TODO max_single_img, min_max_single_img durumlarinde ne yapilacak
+                pass
 
         else:
             if None != self.normalization_path:
