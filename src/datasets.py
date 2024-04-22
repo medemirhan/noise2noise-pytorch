@@ -244,12 +244,27 @@ class NoisyDataset(AbstractDataset):
         """Retrieves image from folder and corrupts it."""
 
         # Load PIL image
-        img_path = os.path.join(self.root_dir, self.imgs[index])
+        img_path = os.path.join(os.path.normpath(self.root_dir), self.imgs[index])
         #img =  Image.open(img_path).convert('RGB')
         img = load_hsi_as_tensor(img_path)
 
         if None != self.normalize:
             img = normalize(img, self.normalize, self.norm_max, self.norm_min)
+
+        ''' Temporary code to save normalized versions of the hsis
+        #-------------------------------------------------------------------------
+        pth_dir = os.path.join(os.getcwd(), "data", self.normalize + "_mapped")
+        pth = os.path.join(pth_dir, self.imgs[index].split(".")[0] + "_norm.mat")
+        if not os.path.exists(pth):
+            import scipy.io as sio
+            img_t = torch.permute(img, (1, 2, 0))
+            img_t = img_t.cpu().numpy()
+            mdic_source = {"data": img_t}
+            if not os.path.exists(pth_dir):
+                os.mkdir(pth_dir)
+            sio.savemat(pth, mdic_source)
+        #-------------------------------------------------------------------------
+        '''
 
         # Random square crop
         if self.crop_size != 0:
