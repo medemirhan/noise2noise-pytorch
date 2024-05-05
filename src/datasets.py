@@ -177,7 +177,11 @@ class NoisyDataset(AbstractDataset):
 
         #noise_img = np.clip(noise_img, 0, 255).astype(np.uint8)
         #return Image.fromarray(noise_img)
-        noise_img = np.clip(noise_img, 0, 255)
+        if None == self.normalize:
+            noise_img = np.clip(noise_img, 0, float('inf'))
+        else:
+            noise_img = np.clip(noise_img, 0, 255)
+
         return noise_img
 
 
@@ -283,7 +287,7 @@ class NoisyDataset(AbstractDataset):
         else:
             tmp = self._corrupt(img)
             assert isinstance(tmp, np.ndarray) and tmp.dtype != np.uint8
-            target = tvF.to_tensor(self._corrupt(img))
+            target = tvF.to_tensor(tmp)
             target = torch.permute(target, (1, 2, 0))
 
         #return source, target

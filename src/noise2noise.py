@@ -192,9 +192,14 @@ class Noise2Noise(object):
             denoised_imgs.append(denoised_img)
 
         # Squeeze tensors
-        source_imgs = [torch.permute(inverse_normalize(t, test_loader.dataset.normalize, test_loader.dataset.norm_max, test_loader.dataset.norm_min).squeeze(0), (1, 2, 0)) for t in source_imgs]
-        denoised_imgs = [torch.permute(inverse_normalize(t, test_loader.dataset.normalize, test_loader.dataset.norm_max, test_loader.dataset.norm_min).squeeze(0), (1, 2, 0)) for t in denoised_imgs]
-        clean_imgs = [torch.permute(inverse_normalize(t, test_loader.dataset.normalize, test_loader.dataset.norm_max, test_loader.dataset.norm_min).squeeze(0), (1, 2, 0)) for t in clean_imgs]
+        if None == test_loader.dataset.normalize:
+            source_imgs = [torch.permute(t.squeeze(0), (1, 2, 0)) for t in source_imgs]
+            denoised_imgs = [torch.permute(t.squeeze(0), (1, 2, 0)) for t in denoised_imgs]
+            clean_imgs = [torch.permute(t.squeeze(0), (1, 2, 0)) for t in clean_imgs]
+        else:
+            source_imgs = [torch.permute(inverse_normalize(t, test_loader.dataset.normalize, test_loader.dataset.norm_max, test_loader.dataset.norm_min).squeeze(0), (1, 2, 0)) for t in source_imgs]
+            denoised_imgs = [torch.permute(inverse_normalize(t, test_loader.dataset.normalize, test_loader.dataset.norm_max, test_loader.dataset.norm_min).squeeze(0), (1, 2, 0)) for t in denoised_imgs]
+            clean_imgs = [torch.permute(inverse_normalize(t, test_loader.dataset.normalize, test_loader.dataset.norm_max, test_loader.dataset.norm_min).squeeze(0), (1, 2, 0)) for t in clean_imgs]
 
         # Create montage and save images
         print('Saving images and montages to: {}'.format(save_path))

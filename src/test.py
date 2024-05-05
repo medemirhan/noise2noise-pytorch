@@ -38,10 +38,10 @@ if __name__ == '__main__':
     # Parse test parameters
     params = parse_args()
 
-    params.data = "data/test"
-    params.load_ckpt = "../ckpts/gaussian-20240407_175022/n2n-epoch10-1487.72949.pt"
+    params.data = "data/test_ll"
+    params.load_ckpt = "../ckpts/gaussian-20240422_095658/n2n-epoch60-0.00006.pt"
     params.noise_type = "gaussian"
-    params.noise_param = 50
+    params.noise_param = 0
     params.crop_size = 256
     params.show_output = 1
     params.cuda = True
@@ -59,8 +59,7 @@ if __name__ == '__main__':
         params,
         shuffled=False,
         single=True,
-        is_train=False,
-        normalization_path="data/norm.pkl"
+        is_train=False
         )
     n2n.load_model(params.load_ckpt)
     n2n.test(test_loader, show=params.show_output)

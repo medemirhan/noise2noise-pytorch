@@ -51,16 +51,16 @@ if __name__ == '__main__':
     # Parse training parameters
     params = parse_args()
 
-    params.train_dir = "data/train_nonnormalized"
+    params.train_dir = "data/train_ll"
     params.train_size = 10
-    params.valid_dir = "data/valid"
+    params.valid_dir = "data/valid_ll"
     params.valid_size = 3
     params.ckpt_save_path = "../ckpts"
     params.nb_epochs = 60
     params.batch_size = 3
     params.loss = "l2"
     params.noise_type = "gaussian"
-    params.noise_param = 50
+    params.noise_param = 0
     params.crop_size = 128
     params.plot_stats = True
     params.cuda = True
@@ -79,9 +79,7 @@ if __name__ == '__main__':
         params.train_size,
         params,
         shuffled=True,
-        is_train=True,
-        normalize="min_max",
-        normalization_path="data/norm.pkl"
+        is_train=True
         )
 
     valid_loader = load_dataset(
@@ -89,8 +87,7 @@ if __name__ == '__main__':
         params.valid_size,
         params,
         shuffled=False,
-        is_train=False,
-        normalization_path="data/norm.pkl"
+        is_train=False
         )
 
     # Initialize model and train
